@@ -1,0 +1,99 @@
+{
+  "IFF": {
+    "set_terminate": true,
+
+    "devices": [
+      {
+        "id": "cpu_dev",
+        "type": "cpu"
+      },
+      {
+        "id": "cuda_dev",
+        "type": "cuda"
+      }
+    ]
+  },
+
+  "chains": [
+    {
+      "id": "main",
+
+      "elements": [
+        {
+          "id": "cam",
+          "type": "xicamera",
+          "cpu_device_id": "cpu_dev",
+          "serial_number": "<CHANGEME>",
+          "image_format": "RAW16",
+          "custom_params": [
+            { "bpc":                            1 },
+            { "column_fpn_correction":          1 },
+            { "row_fpn_correction":             1 },
+            { "column_black_offset_correction": 1 },
+            { "row_black_offset_correction":    1 }
+          ],
+          "exposure": 10000,
+          "gain": 0.0
+        },
+        {
+          "id": "gpuproc",
+          "type": "cuda_processor",
+          "cpu_device_id": "cpu_dev",
+          "gpu_device_id": "cuda_dev",
+          "color": {
+            "dcp_file": "BT709.dcp"
+          },
+          "elements": [
+            { "id": "import_from_host", "type": "import_from_host" },
+            { "id": "bitdepth",         "type": "bitdepth",         "bitdepth": 16 },
+            { "id": "black_level",      "type": "black_level" },
+            { "id": "white_balance",    "type": "white_balance" },
+            { "id": "demosaic",         "type": "demosaic",         "algorithm": "L7" },
+            { "id": "color_correction", "type": "color_correction", "to": "ProPhotoRGB" },
+            { "id": "huesatmap",        "type": "huesatmap" },
+            { "id": "color_space_out",  "type": "color_correction", "from": "ProPhotoRGB", "to": "Rec709" },
+            { "id": "gamma",            "type": "gamma8",           "function": "hlg" },
+            { "id": "export",           "type": "export_to_host",   "output_format": "RGBA8",                 "output_name": "rgba" },
+            { "id": "hist",             "type": "histogram",        "output_format": "Histogram4Bayer256Int", "output_name": "histogram" }
+          ],
+          "connections": [
+            { "src": "import_from_host", "dst": "bitdepth" },
+            { "src": "bitdepth",         "dst": "black_level" },
+            { "src": "black_level",      "dst": "white_balance" },
+            { "src": "white_balance",    "dst": "demosaic" },
+            { "src": "demosaic",         "dst": "color_correction" },
+            { "src": "color_correction", "dst": "huesatmap" },
+            { "src": "huesatmap",        "dst": "color_space_out" },
+            { "src": "color_space_out",  "dst": "gamma" },
+            { "src": "gamma",            "dst": "export" },
+            { "src": "black_level",      "dst": "hist" }
+          ]
+        },
+        {
+          "id": "autoctrl",
+          "type": "awb_aec",
+          "cpu_device_id": "cpu_dev",
+          "autostart": true,
+          "aec_enabled": true,
+          "awb_enabled": true,
+          "max_exposure": 15000,
+          "ev_correction": -1.585
+        },
+        {
+          "id": "exporter",
+          "type": "frame_exporter",
+          "device_id": "cpu_dev"
+        }
+      ],
+      "connections": [
+        { "src": "cam",                           "dst": "gpuproc" },
+        { "src": "gpuproc->histogram",            "dst": "autoctrl", "type": "weak" },
+        { "src": "gpuproc->rgba",                 "dst": "exporter" }
+      ],
+      "parametercontrol": [
+        { "origin": "autoctrl/wb_callback",       "target": "cam" },
+        { "origin": "autoctrl/exposure_callback", "target": "cam" }
+      ]
+    }
+  ]
+}

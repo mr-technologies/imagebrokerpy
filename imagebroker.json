@@ -1,0 +1,91 @@
+{
+  "IFF": {
+    "devices": [
+      {
+        "id": "cpu_dev",
+        "type": "cpu"
+      },
+      {
+        "id": "cuda_dev",
+        "type": "cuda"
+      }
+    ]
+  },
+
+  "chains": [
+    {
+      "id": "main",
+
+      "elements": [
+        {
+          "id": "cam",
+          "type": "xicamera",
+          "cpu_device_id": "cpu_dev",
+          "serial_number": "<CHANGEME>",
+          "image_format": "RAW16",
+          "custom_params": [
+            { "bpc":                            1 },
+            { "column_fpn_correction":          1 },
+            { "row_fpn_correction":             1 },
+            { "column_black_offset_correction": 1 },
+            { "row_black_offset_correction":    1 }
+          ],
+          "exposure": 10000,
+          "gain": 0.0
+        },
+        {
+          "id": "gpuproc",
+          "type": "cuda_processor",
+          "cpu_device_id": "cpu_dev",
+          "gpu_device_id": "cuda_dev",
+          "elements": [
+            { "id": "import_from_host", "type": "import_from_host" },
+            { "id": "black_level",      "type": "black_level" },
+            { "id": "white_balance",    "type": "white_balance" },
+            { "id": "demosaic",         "type": "demosaic",         "algorithm": "L7" },
+            { "id": "color_correction", "type": "color_correction", "matrix": [ 0.0, 0.0, 1.0,
+                                                                                0.0, 1.0, 0.0,
+                                                                                1.0, 0.0, 0.0 ] },
+            { "id": "gamma",            "type": "gamma8",           "function": "hlg" },
+            { "id": "export",           "type": "export_to_device", //change "export_to_device" to "export_to_hostmem", if OpenCV is built without CUDA or OpenGL support
+                                                                    "output_format": "RGBA8",                 "output_name": "rgba" },
+            { "id": "hist",             "type": "histogram",        "output_format": "Histogram4Bayer256Int", "output_name": "histogram" }
+          ],
+          "connections": [
+            { "src": "import_from_host", "dst": "black_level" },
+            { "src": "black_level",      "dst": "white_balance" },
+            { "src": "white_balance",    "dst": "demosaic" },
+            { "src": "demosaic",         "dst": "color_correction" },
+            { "src": "color_correction", "dst": "gamma" },
+            { "src": "gamma",            "dst": "export" },
+            { "src": "black_level",      "dst": "hist" }
+          ]
+        },
+        {
+          "id": "autoctrl",
+          "type": "awb_aec",
+          "cpu_device_id": "cpu_dev",
+          "autostart": true,
+          "aec_enabled": true,
+          "awb_enabled": true,
+          "max_exposure": 15000,
+          "ev_correction": -1.585 //for Hybrid Log-Gamma (HLG) function
+        },
+        {
+          "id": "exporter",
+          "type": "frame_exporter",
+          "device_id": "cuda_dev" //change "cuda_dev" to "cpu_dev", if OpenCV is built without CUDA or OpenGL support
+        }
+      ],
+      "connections": [
+        { "src": "cam",                           "dst": "gpuproc" },
+        { "src": "gpuproc->histogram",            "dst": "autoctrl", "type": "weak" },
+        { "src": "gpuproc->rgba",                 "dst": "exporter" }
+      ],
+      "parametercontrol": [
+        { "origin": "autoctrl/wb_callback",       "target": "cam" },
+        { "origin": "autoctrl/exposure_callback", "target": "cam" }
+      ]
+    }
+  ]
+}

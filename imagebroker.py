@@ -71,7 +71,7 @@ def main():
             render_image = tmp_image
             copy_cv.notify()
 
-    chains[0].set_export_callback("exporter", image_handler)
+    chains[0].set_export_callback('exporter', image_handler)
     chains[0].execute('{"exporter": {"command": "on"}}')
 
     global render_image
